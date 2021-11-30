@@ -5,12 +5,14 @@ from autogluon.tabular import TabularDataset, TabularPredictor
 from autogluon.tabular.metadata.sortinghat import SortingHatFeatureMetadataEngine
 from sklearn.model_selection import train_test_split
 
+pd.set_option("display.max_columns", None, 'display.max_colwidth', None)
+
 sh_engine = SortingHatFeatureMetadataEngine()
 
 models_to_analyze = ["RandomForestGini_BAG_L1", "LightGBM_BAG_L1", "XGBoost_BAG_L1", "NeuralNetFastAI_BAG_L1"]
 
 
-def pipeline(data_dict, category, metadata, downstream):
+def pipeline(data_dict, category, metadata, downstream, problem_type=None):
     res = []
     formatter = "{model}|{perf:.4f}"
     for name in data_dict[category]:
@@ -21,10 +23,13 @@ def pipeline(data_dict, category, metadata, downstream):
         label = metadata.loc[metadata.name == name].iloc[0, 2]  # specifies which column do we want to predict
         data = TabularDataset(df)
         train_data, test_data = train_test_split(data, test_size=0.2, random_state=25)
-        bm0, perf0 = agl_downstream(name, df, train_data, test_data, label, downstream, predictor_type=0,
-                                    truth_vec=truth_vec)
-        bm1, perf1 = agl_downstream(name, df, train_data, test_data, label, downstream, predictor_type=1)
-        bm2, perf2 = agl_downstream(name, df, train_data, test_data, label, downstream, predictor_type=2)
+
+        bm0, perf0 = agl_downstream(name, df, train_data, test_data, label, downstream,
+                                    problem_type=problem_type, predictor_type=0, truth_vec=truth_vec)
+        bm1, perf1 = agl_downstream(name, df, train_data, test_data, label, downstream,
+                                    problem_type=problem_type, predictor_type=1)
+        bm2, perf2 = agl_downstream(name, df, train_data, test_data, label, downstream,
+                                    problem_type=problem_type, predictor_type=2)
         res.append(
             [name, downstream,
              formatter.format(model=bm0, perf=perf0),
@@ -55,40 +60,53 @@ Stable downstream model types:
 all_downstream_models = ['GBM', 'CAT', 'XGB', 'RF', 'XT', 'LR', 'FASTAI', 'NN', 'KNN']
 
 
-def agl_downstream(name, df, train_data, test_data, label, downstream, predictor_type=1, truth_vec=None):
+# excluded_model_types=['GBM', 'CAT', 'FASTAI', 'NN']
+
+def agl_downstream(name, df, train_data, test_data, label, downstream,
+                   problem_type=None, predictor_type=1, truth_vec=None):
     # exclude other tree based models
     print("Fitting downstream with predictor_type=%d" % predictor_type)
     excluded = [x for x in all_downstream_models if x != downstream]
     save_path = 'ag_models/' + name + '/' + downstream + '/'
+    eval_metric = None
+    if problem_type == 'regression':
+        eval_metric = 'root_mean_squared_error'
+    elif problem_type == 'classification':
+        eval_metric = 'accuracy'
     if predictor_type == 0:
         # truth
         true_feature_metadata = sh_engine.to_feature_metadata(df, truth_vec)
-        predictor = TabularPredictor(label=label, eval_metric="accuracy", path=save_path).fit(train_data,
-                                                                                              feature_metadata=true_feature_metadata,
-                                                                                              presets='best_quality',
-                                                                                              excluded_model_types=excluded)
+        predictor = TabularPredictor(label=label, eval_metric=eval_metric, problem_type=problem_type, path=save_path)\
+            .fit(train_data,
+                 feature_metadata=true_feature_metadata,
+                 presets='best_quality',
+                 excluded_model_types=excluded)
     elif predictor_type == 2:
         # AG+SH
-        predictor = TabularPredictor(label=label, eval_metric="accuracy", path=save_path).fit(train_data,
-                                                                                              use_metadata_engine=True,
-                                                                                              presets='best_quality',
-                                                                                              excluded_model_types=excluded)
+        predictor = TabularPredictor(label=label, eval_metric=eval_metric, problem_type=problem_type, path=save_path)\
+            .fit(train_data,
+                 use_metadata_engine=True,
+                 presets='best_quality',
+                 excluded_model_types=excluded)
     else:
         # AG
-        predictor = TabularPredictor(label=label, eval_metric="accuracy", path=save_path).fit(train_data,
-                                                                                              presets='best_quality',
-                                                                                              excluded_model_types=excluded)
-
-    # results = predictor.fit_summary(show_plot=True)
+        predictor = TabularPredictor(label=label, eval_metric=eval_metric, problem_type=problem_type, path=save_path)\
+            .fit(train_data,
+                 presets='best_quality',
+                 excluded_model_types=excluded)
     # Inference time:
     y_test = test_data[label]
     # delete labels from test data since we wouldn't have them in practice
     x_test = test_data.drop(labels=[label], axis=1)
-    print(x_test.head())
     best_model_name = predictor.get_model_best()
     y_pred = predictor.predict(x_test, model=best_model_name)
     perf = predictor.evaluate_predictions(y_true=y_test, y_pred=y_pred)
-    return best_model_name, perf['accuracy']
+    lb = predictor.leaderboard(test_data, silent=True, extra_info=True)
+    print(lb[lb.model == best_model_name]['hyperparameters'])
+    print(lb[lb.model == best_model_name]['hyperparameters_fit'])
+    print(lb[lb.model == best_model_name]['child_hyperparameters'])
+    print(lb[lb.model == best_model_name]['child_hyperparameters_fit'])
+    return best_model_name, perf[eval_metric]
 
 
 classif_data = {
@@ -119,6 +137,9 @@ reg_data = {
 
 if __name__ == '__main__':
     metadata = pd.read_csv("./metadata/metadata.csv")
-    # pipeline(classif_data, 'CA', metadata, 'XGB')
-    pipeline(classif_data, 'CA', metadata, 'FASTAI')
-    # pipeline(classif_data, 'CA', metadata, 'RF')
+    pipeline(classif_data, 'NU+CA', metadata, 'XGB', 'classification')
+    # pipeline(classif_data, 'NU', metadata, 'FASTAI', 'classification')
+    # pipeline(classif_data, 'NU', metadata, 'RF', 'classification')
+    # pipeline(reg_data, 'DT', metadata, 'RF', 'regression')
+    # pipeline(reg_data, 'DT', metadata, 'XGB', 'regression')
+    # pipeline(reg_data, 'DT', metadata, 'FASTAI', 'regression')
