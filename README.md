@@ -16,6 +16,10 @@ Install the forked SortingHat by following instructions in the README or shown b
 git clone https://github.com/fabulousdj/SortingHatLib.git
 pip install SortingHatLib/
 ```
+Install NLTK package via:
+```
+pip install nltk
+```
 Install the forked AutoGluon by following instructions below:
 ```
 python3 -m pip install -U pip
