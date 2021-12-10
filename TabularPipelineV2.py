@@ -9,7 +9,15 @@ pd.set_option("display.max_columns", None, 'display.max_colwidth', None)
 
 sh_engine = SortingHatFeatureMetadataEngine()
 
-models_to_analyze = ["RandomForestGini_BAG_L1", "LightGBM_BAG_L1", "XGBoost_BAG_L1", "NeuralNetFastAI_BAG_L1"]
+
+'''
+pipeline takes 5 parameters:
+- data_dict: classif_data or reg_data; type=dict
+- category: the feature types e.g. 'CA' or 'NU+CA'; type=str
+- metadata: the metadata df; type=pd.DataFrame
+- downstream: the downstream model type e.g. 'XGB', 'FASTAI' or 'RF'; type=str
+- problem_type: the problem type, whether it is 'regression' or 'classification'
+'''
 
 
 def pipeline(data_dict, category, metadata, downstream, problem_type=None):
@@ -60,8 +68,6 @@ Stable downstream model types:
 all_downstream_models = ['GBM', 'CAT', 'XGB', 'RF', 'XT', 'LR', 'FASTAI', 'NN', 'KNN']
 
 
-# excluded_model_types=['GBM', 'CAT', 'FASTAI', 'NN']
-
 def agl_downstream(name, df, train_data, test_data, label, downstream,
                    problem_type=None, predictor_type=1, truth_vec=None):
     # exclude other tree based models
@@ -73,6 +79,7 @@ def agl_downstream(name, df, train_data, test_data, label, downstream,
         eval_metric = 'root_mean_squared_error'
     elif problem_type == 'classification':
         eval_metric = 'accuracy'
+        problem_type = None     # let AGL infer the classification type - binary or multiclass
     if predictor_type == 0:
         # truth
         true_feature_metadata = sh_engine.to_feature_metadata(df, truth_vec)
@@ -80,6 +87,8 @@ def agl_downstream(name, df, train_data, test_data, label, downstream,
             .fit(train_data,
                  feature_metadata=true_feature_metadata,
                  presets='best_quality',
+                 num_bag_folds=0,
+                 num_stack_levels=0,
                  excluded_model_types=excluded)
     elif predictor_type == 2:
         # AG+SH
@@ -87,12 +96,16 @@ def agl_downstream(name, df, train_data, test_data, label, downstream,
             .fit(train_data,
                  use_metadata_engine=True,
                  presets='best_quality',
+                 num_bag_folds=0,
+                 num_stack_levels=0,
                  excluded_model_types=excluded)
     else:
         # AG
         predictor = TabularPredictor(label=label, eval_metric=eval_metric, problem_type=problem_type, path=save_path)\
             .fit(train_data,
                  presets='best_quality',
+                 num_bag_folds=0,
+                 num_stack_levels=0,
                  excluded_model_types=excluded)
     # Inference time:
     y_test = test_data[label]
@@ -137,9 +150,13 @@ reg_data = {
 
 if __name__ == '__main__':
     metadata = pd.read_csv("./metadata/metadata.csv")
-    pipeline(classif_data, 'NU+CA', metadata, 'XGB', 'classification')
-    # pipeline(classif_data, 'NU', metadata, 'FASTAI', 'classification')
-    # pipeline(classif_data, 'NU', metadata, 'RF', 'classification')
-    # pipeline(reg_data, 'DT', metadata, 'RF', 'regression')
-    # pipeline(reg_data, 'DT', metadata, 'XGB', 'regression')
-    # pipeline(reg_data, 'DT', metadata, 'FASTAI', 'regression')
+    # sample run
+    pipeline(reg_data, 'CA', metadata, 'RF', 'regression')
+    # uncomment and modify parameters of the below lines for other classification/regression tasks
+    # and switching downstream models
+    # pipeline(classif_data, 'NU+CA+EN+NG', metadata, 'XGB', 'classification')
+    # pipeline(classif_data, 'NU+CA+EN+NG', metadata, 'FASTAI', 'classification')
+    # pipeline(classif_data, 'NU+CA', metadata, 'RF', 'classification')
+    # pipeline(reg_data, 'CA', metadata, 'RF', 'regression')
+    # pipeline(reg_data, 'CA', metadata, 'XGB', 'regression')
+    # pipeline(reg_data, 'CA', metadata, 'FASTAI', 'regression')
