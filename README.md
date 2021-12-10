@@ -28,6 +28,7 @@ python3 -m pip install -U "mxnet<2.0.0"
 git clone https://github.com/fabulousdj/autogluon
 cd autogluon && ./full_install.sh
 ```
+(Note that AutoGluon currently does not fully support Apple M1 chips. It would be ideal to install and run on a local or remote Linux machine or Apple computers with Intel chips to avoid installation errors.)
 
 ## How to run?
 Once you finished the installation steps above, you can launch the TabularPipelineV2.py script and execute with your target settings by modifying the code in the main function. An example run has been provided to compare model performance on regression tasks with CA datasets.
