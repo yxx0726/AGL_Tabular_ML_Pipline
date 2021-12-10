@@ -3,6 +3,8 @@ Pipeline for benchmarking AutoGluon's downsteam model performance with different
 Downstream models: RandomForest, XGBoost and NN-FastAI  
 Feature type inference strategies: Truth, AGL and AGL+SH  
 
+Please refer to [our report](CSE_234_Team_CU_Final_Report.pdf) for detailed discussion of our work. 
+
 ## Links
 Forked SortingHat: https://github.com/fabulousdj/SortingHatLib  
 Forked AutoGluon: https://github.com/fabulousdj/autogluon  
